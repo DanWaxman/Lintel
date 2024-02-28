@@ -80,7 +80,7 @@ class INTEL:
             )
 
         # Calculate what from Eq. (15)
-        whats = self.weights**self.alpha + 1e-6
+        whats = self.weights**self.alpha + 1e-4
         whats = whats / np.sum(whats)
 
         # Product of experts predictive distributions, Eqs. (21-22)
@@ -103,7 +103,7 @@ class INTEL:
             self.yprime = []
 
             # Update means if time since mean update is more than L
-            if self.t_since_mean_update > self.L:
+            if self.t_since_mean_update >= self.L:
                 for m in range(self.M):
                     self.gps[m].C = np.mean(self.y[-self.L :])
                     self.t_since_mean_update = 0

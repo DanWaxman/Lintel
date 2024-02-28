@@ -107,7 +107,7 @@ class GP(objax.Module):
 
     @property
     def lengthscale(self):
-        return 1e-6 + jnp.minimum(softplus(self.transformed_lengthscale.value), 1e2)
+        return 1e-6 + jnp.minimum(softplus(self.transformed_lengthscale.value), 1e6)
 
     @property
     def sigma_f(self):
@@ -223,3 +223,97 @@ class GP(objax.Module):
                 print(iter_idx, f_value)
 
         self.update_training_set(self.X, self.y)
+
+
+class MarkovianGP(objax.Module):
+    def __init__(self, lengthscale, sigma_f, sigma_n, C):
+        self.transformed_lengthscale = objax.TrainVar(
+            softplus_inv(jnp.asarray(lengthscale))
+        )
+        self.transformed_sigma_f = objax.TrainVar(softplus_inv(jnp.array(sigma_f)))
+        self.transformed_sigma_n = objax.TrainVar(softplus_inv(jnp.asarray(sigma_n)))
+        self.C = C
+        self.t_last = jnp.inf
+
+        self.m = jnp.zeros((3, 1))
+        self.P = self.Pinf
+
+    @property
+    def lengthscale(self):
+        return 1e-6 + jnp.minimum(softplus(self.transformed_lengthscale.value), 1e6)
+
+    @property
+    def sigma_f(self):
+        return 1e-6 + jnp.minimum(softplus(self.transformed_sigma_f.value), 1e2)
+
+    @property
+    def sigma_n(self):
+        return 1e-6 + jnp.minimum(softplus(self.transformed_sigma_n.value), 1e2)
+
+    @property
+    def H(self):
+        return jnp.array([[1, 0, 0]])
+
+    @property
+    def Pinf(self):
+        kappa = 5.0 / 3.0 * self.sigma_f**2 / self.lengthscale**2.0
+
+        return jnp.array(
+            [
+                [self.sigma_f**2, 0.0, -kappa],
+                [0.0, kappa, 0.0],
+                [-kappa, 0.0, 25.0 * self.sigma_f**2 / self.lengthscale**4.0],
+            ]
+        )
+
+    def get_Q(self, A):
+        return self.Pinf - A @ self.Pinf @ A.T
+
+    def get_A(self, dt):
+        lam = jnp.sqrt(5.0) / self.lengthscale
+        dtlam = dt * lam
+        A = jnp.exp(-dtlam) * (
+            dt
+            * jnp.array(
+                [
+                    [lam * (0.5 * dtlam + 1.0), dtlam + 1.0, 0.5 * dt],
+                    [-0.5 * dtlam * lam**2, lam * (1.0 - dtlam), 1.0 - 0.5 * dtlam],
+                    [
+                        lam**3 * (0.5 * dtlam - 1.0),
+                        lam**2 * (dtlam - 3),
+                        lam * (0.5 * dtlam - 2.0),
+                    ],
+                ]
+            )
+            + jnp.eye(3)
+        )
+        return A
+
+    def predict(self, t_star):
+        dt = max(t_star - self.t_last, 0)
+        A_n = self.get_A(dt)
+        m_evolved = A_n @ self.m
+        P_evolved = A_n @ self.P @ A_n.T + self.get_Q(A_n)
+
+        m = self.H @ m_evolved + self.C
+        sigma2 = self.H @ P_evolved @ self.H.T + self.sigma_n**2
+
+        return m, sigma2, m_evolved, P_evolved
+
+    def update(self, t_star, y_star, m, sigma2, m_evolved, P_evolved):
+        k = jax.scipy.linalg.solve(sigma2, self.H @ P_evolved, assume_a="pos").T
+        self.m = m_evolved + k @ (y_star - m)
+        self.P = P_evolved - k @ self.H @ P_evolved
+        self.t_last = t_star
+
+    def reset_and_filter(self, t, y, mean):
+        self.C = mean
+        self.t_last = jnp.inf
+
+        self.m = jnp.zeros((3, 1))
+        self.P = self.Pinf
+        N = t.shape[0]
+
+        for n in range(N):
+            o = self.predict(t[n])
+            self.update(t[n], y[n], *o)
