@@ -2,8 +2,8 @@ import jax
 
 jax.config.update("jax_enable_x64", True)
 
-from Lintel import intel
-from Lintel.gp_utils import GP
+from Lintel import lintel
+from Lintel.gp_utils import GP, MarkovianGP
 import pandas as pd
 import numpy as np
 from tqdm import tqdm
@@ -29,38 +29,45 @@ gp1 = GP(
     C=pretrain_y.mean(),
 )
 
+print("Pretraining GP")
 gp1.maximize_evidence(pretrain_t, pretrain_y, lr=1e-2, iters=5000, verbose=False)
+print("Finished Pretraining")
 
-gp2 = GP(
-    np.array(pretrain_t),
-    np.array(pretrain_y),
+gp1 = MarkovianGP(
+    lengthscale=gp1.lengthscale,
+    sigma_f=gp1.sigma_f,
+    sigma_n=gp1.sigma_n,
+    C=pretrain_y.mean(),
+)
+gp1.reset_and_filter(pretrain_y, pretrain_y, pretrain_y.mean())
+
+gp2 = MarkovianGP(
     lengthscale=gp1.lengthscale,
     sigma_f=gp1.sigma_f / 5.0,
     sigma_n=5.0 * gp1.sigma_n,
     C=pretrain_y.mean(),
 )
+gp2.reset_and_filter(pretrain_y, pretrain_y, pretrain_y.mean())
 
-gp3 = GP(
-    np.array(pretrain_t),
-    np.array(pretrain_y),
+gp3 = MarkovianGP(
     lengthscale=gp1.lengthscale,
     sigma_f=gp1.sigma_f,
     sigma_n=gp1.sigma_n / 5.0,
     C=pretrain_y.mean(),
 )
+gp3.reset_and_filter(pretrain_y, pretrain_y, pretrain_y.mean())
 
-gp4 = GP(
-    np.array(pretrain_t),
-    np.array(pretrain_y),
+gp4 = MarkovianGP(
     lengthscale=gp1.lengthscale,
     sigma_f=gp1.sigma_f / 5.0,
     sigma_n=gp1.sigma_n / 2.0,
     C=pretrain_y.mean(),
 )
+gp4.reset_and_filter(pretrain_y, pretrain_y, pretrain_y.mean())
 
-intel = intel.INTEL(
+
+lintel = lintel.LINTEL(
     N=3,
-    tau=20,
     alpha=0.9,
     weights=np.ones(
         4,
@@ -76,8 +83,8 @@ ots = []
 ws = []
 
 for t in tqdm(range(len(train_y))):
-    m, s, o = intel.predict_and_update(train_t[t], train_y[t])
-    ws.append(intel.weights)
+    m, s, o = lintel.predict_and_update(train_t[t], train_y[t])
+    ws.append(lintel.weights)
 
     if o:
         ots.append(t)
@@ -87,12 +94,13 @@ for t in tqdm(range(len(train_y))):
 
 ms = np.array(ms)
 ss = np.array(ss)
+print(ms.shape, ss.shape)
 
-np.savetxt("Intel_pll.txt", stats.norm.logpdf(train_y, ms, np.sqrt(ss)))
+np.savetxt("Lintel_pll.txt", stats.norm.logpdf(train_y, ms, np.sqrt(ss)))
 print("Mean PLL:", stats.norm.logpdf(train_y, ms, np.sqrt(ss)).mean())
 
 plt.plot(stats.norm.logpdf(train_y, ms, np.sqrt(ss)))
-plt.savefig("Intel_PLL.png")
+plt.savefig("Lintel_PLL.png")
 plt.clf()
 
 plt.scatter(pretrain_t, pretrain_y)
@@ -104,7 +112,7 @@ plt.fill_between(
 for ot in ots:
     plt.scatter(train_t[ot], train_y[ot], color="green", marker="+", s=250)
 
-plt.savefig("Intel_Test.png")
+plt.savefig("Lintel_Test.png")
 
 plt.clf()
 
@@ -123,4 +131,4 @@ for ot in ots:
         continue
     plt.scatter(train_t[ot], train_y[ot], color="green", marker="+", s=250)
 
-plt.savefig("Intel_Test_Closeup.png")
+plt.savefig("Lintel_Test_Closeup.png")
