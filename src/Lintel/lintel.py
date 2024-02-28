@@ -96,17 +96,19 @@ class LINTEL:
             self.yprime = []
 
             # Update means if time since mean update is more than L
+            self.bin_total += ytp1
+            self.t_since_mean_update += 1
+
             if self.t_since_mean_update >= self.L:
+                self.bin_total += ytp1
+
                 for m in range(self.M):
                     self.gps[m].C = self.bin_total / self.L
 
                 self.bin_total = 0.0
                 self.t_since_mean_update = 0.0
-            else:
-                self.bin_total += ytp1
-                self.t_since_mean_update += 1
-        else:
 
+        else:
             # Add to PCB and flag as an outlier
             self.tprime.append(ttp1)
             self.yprime.append(ytp1)
