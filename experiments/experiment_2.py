@@ -12,7 +12,7 @@ import seaborn as sns
 
 sns.set_theme(context="paper", style="whitegrid", palette="colorblind")
 
-s = "data/noumenta/realTraffic/realTraffic/occupancy_t4013.csv"
+s = "data/noumenta/realAWSCloudwatch/realAWSCloudwatch/ec2_cpu_utilization_ac20cd.csv"
 train_y = pd.read_csv(s).value.to_numpy()
 train_t = np.arange(len(train_y))
 
@@ -36,7 +36,7 @@ if FIT_MODE:
     )
 
     print("Pretraining GP")
-    gp1.maximize_evidence(pretrain_t, pretrain_y, lr=1e-2, iters=5000, verbose=False)
+    gp1.maximize_evidence(pretrain_t, pretrain_y, lr=1e-2, iters=4500, verbose=False)
     print("Finished Pretraining")
 
     gp1 = MarkovianGP(
@@ -50,7 +50,7 @@ if FIT_MODE:
     gp2 = MarkovianGP(
         lengthscale=gp1.lengthscale,
         sigma_f=gp1.sigma_f / 5.0,
-        sigma_n=5.0 * gp1.sigma_n,
+        sigma_n=gp1.sigma_n,
         C=pretrain_y.mean(),
     )
     gp2.reset_and_filter(pretrain_t, pretrain_y, pretrain_y.mean())
@@ -65,29 +65,21 @@ if FIT_MODE:
 
     gp4 = MarkovianGP(
         lengthscale=gp1.lengthscale,
-        sigma_f=gp1.sigma_f / 5.0,
+        sigma_f=gp1.sigma_f / 2.0,
         sigma_n=gp1.sigma_n / 2.0,
         C=pretrain_y.mean(),
     )
     gp4.reset_and_filter(pretrain_t, pretrain_y, pretrain_y.mean())
 
-    gp5 = MarkovianGP(
-        lengthscale=gp1.lengthscale,
-        sigma_f=gp1.sigma_f,
-        sigma_n=gp1.sigma_n * 1.414,
-        C=pretrain_y.mean(),
-    )
-    gp5.reset_and_filter(pretrain_t, pretrain_y, pretrain_y.mean())
-
     lintel = lintel.LINTEL(
-        N=10,
+        N=3,
         alpha=0.9,
         weights=np.ones(
-            5,
+            4,
         )
-        / 5,
-        gps=[gp1, gp2, gp3, gp4, gp5],
-        L=50,
+        / 4,
+        gps=[gp1, gp2, gp3, gp4],
+        L=10,
     )
 
     ms = []
@@ -109,7 +101,9 @@ if FIT_MODE:
     ss = np.array(ss)
     ots = np.array(ots)
 
-    np.savez("results/occupancy_t4013_lintel_results.npz", ms=ms, ss=ss, ots=ots)
+    np.savez(
+        "results/ec2_cpu_utilization_ac20cd_lintel_results.npz", ms=ms, ss=ss, ots=ots
+    )
 
     gp1 = GP(
         np.array(pretrain_t),
@@ -120,14 +114,14 @@ if FIT_MODE:
         C=pretrain_y.mean(),
     )
 
-    gp1.maximize_evidence(pretrain_t, pretrain_y, lr=1e-2, iters=5000, verbose=False)
+    gp1.maximize_evidence(pretrain_t, pretrain_y, lr=1e-2, iters=4500, verbose=False)
 
     gp2 = GP(
         np.array(pretrain_t),
         np.array(pretrain_y),
         lengthscale=gp1.lengthscale,
-        sigma_f=gp1.sigma_f / 5.0,
-        sigma_n=5.0 * gp1.sigma_n,
+        sigma_f=gp1.sigma_f / 2.0,
+        sigma_n=gp1.sigma_n,
         C=pretrain_y.mean(),
     )
 
@@ -136,7 +130,7 @@ if FIT_MODE:
         np.array(pretrain_y),
         lengthscale=gp1.lengthscale,
         sigma_f=gp1.sigma_f,
-        sigma_n=gp1.sigma_n / 5.0,
+        sigma_n=gp1.sigma_n / 2.0,
         C=pretrain_y.mean(),
     )
 
@@ -144,30 +138,21 @@ if FIT_MODE:
         np.array(pretrain_t),
         np.array(pretrain_y),
         lengthscale=gp1.lengthscale,
-        sigma_f=gp1.sigma_f / 5.0,
+        sigma_f=gp1.sigma_f / 2.0,
         sigma_n=gp1.sigma_n / 2.0,
         C=pretrain_y.mean(),
     )
 
-    gp5 = GP(
-        np.array(pretrain_t),
-        np.array(pretrain_y),
-        lengthscale=gp1.lengthscale,
-        sigma_f=gp1.sigma_f,
-        sigma_n=gp1.sigma_n * 1.414,
-        C=pretrain_y.mean(),
-    )
-
     intel = intel.INTEL(
-        N=10,
+        N=3,
         tau=20,
         alpha=0.9,
         weights=np.ones(
-            5,
+            4,
         )
-        / 5,
-        gps=[gp1, gp2, gp3, gp4, gp5],
-        L=50,
+        / 4,
+        gps=[gp1, gp2, gp3, gp4],
+        L=10,
     )
 
     ms = []
@@ -188,21 +173,23 @@ if FIT_MODE:
     ms = np.array(ms)
     ots = np.array(ots)
 
-    np.savez("results/occupancy_t4013_intel_results.npz", ms=ms, ss=ss, ots=ots)
+    np.savez(
+        "results/ec2_cpu_utilization_ac20cd_intel_results.npz", ms=ms, ss=ss, ots=ots
+    )
 
 ### Plotting
 if PLOT_MODE:
-    res_lintel = np.load("results/occupancy_t4013_lintel_results.npz")
+    res_lintel = np.load("results/ec2_cpu_utilization_ac20cd_lintel_results.npz")
     m_lintel = res_lintel["ms"]
     s_lintel = res_lintel["ss"]
     o_lintel = res_lintel["ots"]
 
-    res_intel = np.load("results/occupancy_t4013_intel_results.npz")
+    res_intel = np.load("results/ec2_cpu_utilization_ac20cd_intel_results.npz")
     m_intel = res_intel["ms"]
     s_intel = res_intel["ss"]
     o_intel = res_intel["ots"]
 
-    fig, ax1 = plt.subplots(figsize=(7.5, 2.0))
+    fig, ax1 = plt.subplots(figsize=(7, 2))
     ax1.scatter(pretrain_t, pretrain_y, alpha=0.2, label="Pretraining Points")
     ax1.scatter(train_t, train_y, color="black", alpha=0.2, label="Training Points")
     ax1.scatter(
@@ -237,13 +224,13 @@ if PLOT_MODE:
     )
 
     x1, x2, y1, y2 = (
-        train_t[700],
-        train_t[900],
-        np.min(m_lintel[700:900] - 2 * np.sqrt(s_lintel)[700:900]) - 1.0,
-        np.max(m_lintel[700:900] + 2 * np.sqrt(s_lintel)[700:900]) + 1.0,
+        train_t[450],
+        train_t[650],
+        np.min(m_lintel[450:650] - 2 * np.sqrt(s_lintel)[450:650]) - 1.0,
+        np.max(m_lintel[450:650] + 2 * np.sqrt(s_lintel)[450:650]) + 1.0,
     )
     axin1 = ax1.inset_axes(
-        [0.56, 0.04, 0.3, 0.3],
+        [0.2, 0.65, 0.3, 0.3],
         xlim=(x1, x2),
         ylim=(y1, y2),
         xticks=[],
@@ -252,23 +239,23 @@ if PLOT_MODE:
         yticklabels=[],
     )
 
-    axin1.scatter(pretrain_t[700:900], pretrain_y[700:900], alpha=0.2)
-    axin1.scatter(train_t[700:900], train_y[700:900], color="black", alpha=0.2)
-    axin1.plot(train_t[700:900], m_lintel[700:900])
+    axin1.scatter(pretrain_t[450:650], pretrain_y[450:650], alpha=0.2)
+    axin1.scatter(train_t[450:650], train_y[450:650], color="black", alpha=0.2)
+    axin1.plot(train_t[450:650], m_lintel[450:650])
     axin1.fill_between(
-        train_t[700:900],
-        m_lintel[700:900] + 2 * np.sqrt(s_lintel)[700:900],
-        m_lintel[700:900] - 2 * np.sqrt(s_lintel)[700:900],
+        train_t[450:650],
+        m_lintel[450:650] + 2 * np.sqrt(s_lintel)[450:650],
+        m_lintel[450:650] - 2 * np.sqrt(s_lintel)[450:650],
         alpha=0.3,
     )
-    axin1.plot(train_t[700:900], m_intel[700:900], linestyle="--")
+    axin1.plot(train_t[450:650], m_intel[450:650], linestyle="--")
     axin1.fill_between(
-        train_t[700:900],
-        m_intel[700:900] + 2 * np.sqrt(s_intel)[700:900],
-        m_intel[700:900] - 2 * np.sqrt(s_intel)[700:900],
+        train_t[450:650],
+        m_intel[450:650] + 2 * np.sqrt(s_intel)[450:650],
+        m_intel[450:650] - 2 * np.sqrt(s_intel)[450:650],
         alpha=0.3,
     )
-    os = o_lintel[(o_lintel > 700) * (o_lintel < 900)]
+    os = o_lintel[(o_lintel > 450) * (o_lintel < 650)]
     axin1.scatter(
         train_t[os],
         train_y[os],
@@ -277,7 +264,7 @@ if PLOT_MODE:
         alpha=0.8,
         label="LINTEL Outlier",
     )
-    os = o_intel[(o_intel > 700) * (o_intel < 900)]
+    os = o_intel[(o_intel > 450) * (o_intel < 650)]
     axin1.scatter(
         train_t[os],
         train_y[os],
@@ -289,10 +276,9 @@ if PLOT_MODE:
 
     ax1.indicate_inset_zoom(axin1, edgecolor="black", alpha=1, lw=0.7)
 
-    plt.title("Occupancy Dataset")
-    plt.legend(ncol=2)
+    plt.title("EC2 Dataset")
     plt.savefig(
-        "plots/experiment_1_output.png",
+        "plots/experiment_2_output.png",
         dpi=600,
         transparent=False,
         bbox_inches="tight",

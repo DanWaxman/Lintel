@@ -95,15 +95,13 @@ class LINTEL:
             self.tprime = []
             self.yprime = []
 
-            # Update means if time since mean update is more than L
             self.bin_total += ytp1
             self.t_since_mean_update += 1
 
+            # Update means if time since mean update is more than L
             if self.t_since_mean_update >= self.L:
-                self.bin_total += ytp1
-
                 for m in range(self.M):
-                    self.gps[m].C = self.bin_total / self.L
+                    self.gps[m].C = self.bin_total / self.t_since_mean_update
 
                 self.bin_total = 0.0
                 self.t_since_mean_update = 0.0
