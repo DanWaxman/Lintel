@@ -26,7 +26,7 @@ FIT_MODE = True
 PLOT_MODE = True
 
 if FIT_MODE:
-    gp1 = GP(
+    gp0 = GP(
         np.array(pretrain_t),
         np.array(pretrain_y),
         lengthscale=10.0,
@@ -36,49 +36,57 @@ if FIT_MODE:
     )
 
     print("Pretraining GP")
-    gp1.maximize_evidence(pretrain_t, pretrain_y, lr=1e-2, iters=4500, verbose=False)
+    gp0.maximize_evidence(pretrain_t, pretrain_y, lr=1e-2, iters=4500, verbose=False)
     print("Finished Pretraining")
 
     gp1 = MarkovianGP(
-        lengthscale=gp1.lengthscale,
-        sigma_f=gp1.sigma_f,
-        sigma_n=gp1.sigma_n,
+        lengthscale=gp0.lengthscale,
+        sigma_f=gp0.sigma_f,
+        sigma_n=gp0.sigma_n,
         C=pretrain_y.mean(),
     )
     gp1.reset_and_filter(pretrain_t, pretrain_y, pretrain_y.mean())
 
     gp2 = MarkovianGP(
-        lengthscale=gp1.lengthscale,
-        sigma_f=gp1.sigma_f / 5.0,
-        sigma_n=gp1.sigma_n,
+        lengthscale=gp0.lengthscale,
+        sigma_f=gp0.sigma_f / 5.0,
+        sigma_n=gp0.sigma_n,
         C=pretrain_y.mean(),
     )
     gp2.reset_and_filter(pretrain_t, pretrain_y, pretrain_y.mean())
 
     gp3 = MarkovianGP(
-        lengthscale=gp1.lengthscale,
-        sigma_f=gp1.sigma_f,
-        sigma_n=gp1.sigma_n / 5.0,
+        lengthscale=gp0.lengthscale,
+        sigma_f=gp0.sigma_f,
+        sigma_n=gp0.sigma_n / 5.0,
         C=pretrain_y.mean(),
     )
     gp3.reset_and_filter(pretrain_t, pretrain_y, pretrain_y.mean())
 
     gp4 = MarkovianGP(
-        lengthscale=gp1.lengthscale,
-        sigma_f=gp1.sigma_f / 2.0,
-        sigma_n=gp1.sigma_n / 2.0,
+        lengthscale=gp0.lengthscale,
+        sigma_f=gp0.sigma_f / 2.0,
+        sigma_n=gp0.sigma_n / 2.0,
         C=pretrain_y.mean(),
     )
     gp4.reset_and_filter(pretrain_t, pretrain_y, pretrain_y.mean())
+
+    gp5 = MarkovianGP(
+        lengthscale=gp0.lengthscale,
+        sigma_f=gp0.sigma_f,
+        sigma_n=gp0.sigma_n * 1.414,
+        C=pretrain_y.mean(),
+    )
+    gp5.reset_and_filter(pretrain_t, pretrain_y, pretrain_y.mean())
 
     lintel = lintel.LINTEL(
         N=3,
         alpha=0.9,
         weights=np.ones(
-            4,
+            5,
         )
-        / 4,
-        gps=[gp1, gp2, gp3, gp4],
+        / 5,
+        gps=[gp1, gp2, gp3, gp4, gp5],
         L=10,
     )
 
@@ -108,38 +116,45 @@ if FIT_MODE:
     gp1 = GP(
         np.array(pretrain_t),
         np.array(pretrain_y),
-        lengthscale=10.0,
-        sigma_f=1.0,
-        sigma_n=pretrain_y.std(),
+        lengthscale=gp0.lengthscale,
+        sigma_f=gp0.sigma_f,
+        sigma_n=gp0.sigma_n,
         C=pretrain_y.mean(),
     )
-
-    gp1.maximize_evidence(pretrain_t, pretrain_y, lr=1e-2, iters=4500, verbose=False)
 
     gp2 = GP(
         np.array(pretrain_t),
         np.array(pretrain_y),
-        lengthscale=gp1.lengthscale,
-        sigma_f=gp1.sigma_f / 2.0,
-        sigma_n=gp1.sigma_n,
+        lengthscale=gp0.lengthscale,
+        sigma_f=gp0.sigma_f / 2.0,
+        sigma_n=gp0.sigma_n,
         C=pretrain_y.mean(),
     )
 
     gp3 = GP(
         np.array(pretrain_t),
         np.array(pretrain_y),
-        lengthscale=gp1.lengthscale,
-        sigma_f=gp1.sigma_f,
-        sigma_n=gp1.sigma_n / 2.0,
+        lengthscale=gp0.lengthscale,
+        sigma_f=gp0.sigma_f,
+        sigma_n=gp0.sigma_n / 2.0,
         C=pretrain_y.mean(),
     )
 
     gp4 = GP(
         np.array(pretrain_t),
         np.array(pretrain_y),
-        lengthscale=gp1.lengthscale,
-        sigma_f=gp1.sigma_f / 2.0,
-        sigma_n=gp1.sigma_n / 2.0,
+        lengthscale=gp0.lengthscale,
+        sigma_f=gp0.sigma_f / 2.0,
+        sigma_n=gp0.sigma_n / 2.0,
+        C=pretrain_y.mean(),
+    )
+
+    gp5 = GP(
+        np.array(pretrain_t),
+        np.array(pretrain_y),
+        lengthscale=gp0.lengthscale,
+        sigma_f=gp0.sigma_f,
+        sigma_n=gp0.sigma_n * 1.414,
         C=pretrain_y.mean(),
     )
 
@@ -148,10 +163,10 @@ if FIT_MODE:
         tau=20,
         alpha=0.9,
         weights=np.ones(
-            4,
+            5,
         )
-        / 4,
-        gps=[gp1, gp2, gp3, gp4],
+        / 5,
+        gps=[gp1, gp2, gp3, gp4, gp5],
         L=10,
     )
 
