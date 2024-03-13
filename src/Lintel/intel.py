@@ -1,6 +1,6 @@
 from scipy import stats
 from jaxtyping import Array, Float
-from .gp_utils import GP
+from .gp_utils_old import GP
 import numpy as np
 import scipy
 
@@ -71,7 +71,7 @@ class INTEL:
 
         # Predict with each candidate model
         for m in range(self.M):
-            out = self.gps[m].predict(np.atleast_1d(ttp1))
+            out = self.gps[m].predict(np.atleast_2d(ttp1))
             candidate_means[m] = np.squeeze(out[0])
             candidate_variances[m] = np.squeeze(out[1])
 
@@ -96,7 +96,7 @@ class INTEL:
             self.t = np.concatenate([self.t, np.atleast_1d(ttp1)])[-self.tau :]
             self.y = np.concatenate([self.y, np.atleast_1d(ytp1)])[-self.tau :]
             for m in range(self.M):
-                self.gps[m].update_training_set(self.t, self.y)
+                self.gps[m].update_training_set(np.atleast_2d(self.t.T).T, self.y)
 
             # Reset PCB
             self.tprime = []
@@ -118,13 +118,14 @@ class INTEL:
             # If tprime has >= N elements, we've arrived at a changepoint
             if len(self.tprime) >= self.N:
                 # Changepoint
-                self.t = np.array(self.tprime)
+                self.t = np.array(self.tprime).squeeze()
                 self.y = np.array(self.yprime)
 
                 for m in range(self.M):
-                    self.gps[m].update_training_set(self.t, self.y)
+                    self.gps[m].update_training_set(np.atleast_2d(self.t.T).T, self.y)
                     self.gps[m].C = np.mean(self.y)
                     self.t_since_mean_update = 0
+                    whats = np.ones_like(whats) / whats.size
 
         # Update weights with Eq. (16)
         log_w = np.log(whats)

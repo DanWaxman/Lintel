@@ -1,128 +1,56 @@
 import jax
 import jax.numpy as jnp
 import math
-from tensorflow_probability.substrates.jax import math as tfp_math
 from jaxtyping import Array, Float
+from tensorflow_probability.substrates.jax import math as tfp_math
+import bayesnewton
 import objax
-
-
-# Some utils taken from https://github.com/jejjohnson/gp_model_zoo
-
-
-def cross_covariance(
-    func: callable, x: Float[Array, "N D"], y: Float[Array, "M D"]
-) -> Float[Array, "N M"]:
-    """distance matrix"""
-    return jax.vmap(lambda x1: jax.vmap(lambda y1: func(x1, y1))(y))(x)
-
-
-def sqeuclidean_distance(x: Float[Array, "D"], y: Float[Array, "D"]) -> float:
-    return jnp.sum((x - y) ** 2)
-
-
-def euclidean_distance(x: Float[Array, "D"], y: Float[Array, "D"]) -> float:
-    return jnp.sqrt(jnp.sum((x - y) ** 2) + 1e-16)
-
-
-def rbf_kernel(
-    X: Float[Array, "N D"], Y: Float[Array, "M D"], variance: float, lengthscale: float
-) -> Float[Array, "N M"]:
-    deltaXsq = cross_covariance(sqeuclidean_distance, X / lengthscale, Y / lengthscale)
-
-    K = variance * jnp.exp(-0.5 * deltaXsq)
-    return K
-
-
-def mat52_kernel(
-    X: Float[Array, "N D"], Y: Float[Array, "M D"], variance: float, lengthscale: float
-) -> Float[Array, "N M"]:
-    mean = jnp.mean(X)
-
-    distance = cross_covariance(
-        euclidean_distance, (X - mean) / lengthscale, (Y - mean) / lengthscale
-    )
-    const_component = math.sqrt(5) * distance + 1 + 5.0 / 3.0 * distance**2
-    exp_component = jnp.exp(-math.sqrt(5) * distance)
-
-    return variance * const_component * exp_component
+from bayesnewton.utils import (
+    softplus,
+    softplus_inv,
+    rotation_matrix,
+)
+import copy
 
 
 def add_to_diagonal(K: Float[Array, "N M"], constant: float) -> Float[Array, "N M"]:
     return K.at[jnp.diag_indices(K.shape[0])].add(constant)
 
 
-def softplus(x: Float[Array, "..."]) -> Float[Array, "..."]:
-    """Alias for `jax.nn.softplus`.
-
-    Args:
-        x (Float[Array, "..."]): x
-
-    Returns:
-        Float[Array, "..."]: softplus(x)
-    """
-    return jax.nn.softplus(x)
-
-
-def softplus_inv(x: Float[Array, "..."]) -> Float[Array, "..."]:
-    """Alias for `tfp_math.softplus_inverse`.
-
-    Args:
-        x (Float[Array, "..."]): x
-
-    Returns:
-        Float[Array, "..."]: softplus^{-1}(x)
-    """
-    return tfp_math.softplus_inverse(x)
+class ObjaxModuleWithDeepCopy(objax.Module):
+    def __deepcopy__(self, memo):
+        cls = self.__class__
+        result = cls.__new__(cls)
+        memo[id(self)] = result
+        for k, v in self.__dict__.items():
+            if isinstance(v, objax.BaseVar):
+                # TODO: There are more correct ways to do this, but it works for now
+                v = v.__class__(v.value)
+                setattr(result, k, v)
+            else:
+                setattr(result, k, copy.deepcopy(v, memo))
+        return result
 
 
-class GP(objax.Module):
+class GP(ObjaxModuleWithDeepCopy):
     def __init__(
         self,
         X: Float[Array, "N D"],
         y: Float[Array, "N"],
-        lengthscale: float,
-        sigma_f: float,
-        sigma_n: float,
-        C: float,
+        C: Float,
+        sigma_n: Float,
+        kernel: bayesnewton.kernels.Kernel,
     ):
-        """Creates an instance of an Objax-implementation of kernel-based GPs, using the Matern-5/2
-        kernel.
-
-        Args:
-            X (Float[Array, &quot;N D&quot;]): Training inputs
-            y (Float[Array, &quot;N&quot;]): Training outputs
-            lengthscale (float): lengthscale of kernel
-            sigma_f (float): process scale of kernel
-            sigma_n (float): additive noise scale
-            C (float): value of a constant mean function in the prior
-        """
-        self.transformed_lengthscale = objax.TrainVar(
-            softplus_inv(jnp.asarray(lengthscale))
-        )
-        self.transformed_sigma_f = objax.TrainVar(softplus_inv(jnp.array(sigma_f)))
-        self.transformed_sigma_n = objax.TrainVar(softplus_inv(jnp.asarray(sigma_n)))
         self.C = C
-
+        self.kernel = kernel
+        self.transformed_sigma_n = objax.TrainVar(softplus_inv(jnp.asarray(sigma_n)))
+        self.k = objax.Jit(self.kernel.K, vc=self.vars())
+        self.cho_factor = jax.jit(jax.scipy.linalg.cholesky)
         self.update_training_set(X, y)
-
-    @property
-    def lengthscale(self):
-        return 1e-6 + jnp.minimum(softplus(self.transformed_lengthscale.value), 1e6)
-
-    @property
-    def sigma_f(self):
-        return 1e-6 + jnp.minimum(softplus(self.transformed_sigma_f.value), 1e2)
 
     @property
     def sigma_n(self):
         return 1e-6 + jnp.minimum(softplus(self.transformed_sigma_n.value), 1e2)
-
-    def k(
-        self, X1: Float[Array, "N D"], X2: Float[Array, "M D"]
-    ) -> Float[Array, "N M"]:
-        return mat52_kernel(
-            X1, X2, variance=self.sigma_f**2, lengthscale=self.lengthscale
-        )
 
     def add_predictive_var(self, mat: Float[Array, "..."]) -> Float[Array, "..."]:
         """Adds the predictive variance to the diagonal of the matrix
@@ -167,7 +95,10 @@ class GP(objax.Module):
         self.y = y
 
         self.K_oo = self.add_predictive_var(self.k(X, X))
-        self.A_cho = jax.scipy.linalg.cho_factor(self.K_oo)
+        self.A_cho = (
+            self.cho_factor(self.K_oo),
+            False,
+        )
 
     def mnll(self, X: Float[Array, "N D"], y: Float[Array, "N"]) -> float:
         """Calculates the negative marginal likelihood of the data
@@ -224,70 +155,33 @@ class GP(objax.Module):
 
         self.update_training_set(self.X, self.y)
 
+        return f_value
 
-class MarkovianGP(objax.Module):
-    def __init__(self, lengthscale, sigma_f, sigma_n, C):
-        self.transformed_lengthscale = objax.TrainVar(
-            softplus_inv(jnp.asarray(lengthscale))
-        )
-        self.transformed_sigma_f = objax.TrainVar(softplus_inv(jnp.array(sigma_f)))
-        self.transformed_sigma_n = objax.TrainVar(softplus_inv(jnp.asarray(sigma_n)))
+
+class MarkovianGP(ObjaxModuleWithDeepCopy):
+    def __init__(self, C, sigma_n, kernel):
         self.C = C
+        self.transformed_sigma_n = objax.TrainVar(softplus_inv(jnp.asarray(sigma_n)))
+        self.kernel = kernel
         self.t_last = jnp.inf
 
-        self.m = jnp.zeros((3, 1))
-        self.P = self.Pinf
-
-    @property
-    def lengthscale(self):
-        return 1e-6 + jnp.minimum(softplus(self.transformed_lengthscale.value), 1e6)
-
-    @property
-    def sigma_f(self):
-        return 1e-6 + jnp.minimum(softplus(self.transformed_sigma_f.value), 1e2)
+        self.n_dim = self.kernel.stationary_covariance().shape[0]
+        self.m = jnp.zeros((self.n_dim, 1))
+        self.Pinf = self.kernel.stationary_covariance()
+        self.H = self.kernel.measurement_model()
+        self.state_transition_func = objax.Jit(
+            self.kernel.state_transition, vc=self.vars()
+        )
 
     @property
     def sigma_n(self):
         return 1e-6 + jnp.minimum(softplus(self.transformed_sigma_n.value), 1e2)
 
-    @property
-    def H(self):
-        return jnp.array([[1, 0, 0]])
-
-    @property
-    def Pinf(self):
-        kappa = 5.0 / 3.0 * self.sigma_f**2 / self.lengthscale**2.0
-
-        return jnp.array(
-            [
-                [self.sigma_f**2, 0.0, -kappa],
-                [0.0, kappa, 0.0],
-                [-kappa, 0.0, 25.0 * self.sigma_f**2 / self.lengthscale**4.0],
-            ]
-        )
-
     def get_Q(self, A):
         return self.Pinf - A @ self.Pinf @ A.T
 
     def get_A(self, dt):
-        lam = jnp.sqrt(5.0) / self.lengthscale
-        dtlam = dt * lam
-        A = jnp.exp(-dtlam) * (
-            dt
-            * jnp.array(
-                [
-                    [lam * (0.5 * dtlam + 1.0), dtlam + 1.0, 0.5 * dt],
-                    [-0.5 * dtlam * lam**2, lam * (1.0 - dtlam), 1.0 - 0.5 * dtlam],
-                    [
-                        lam**3 * (0.5 * dtlam - 1.0),
-                        lam**2 * (dtlam - 3),
-                        lam * (0.5 * dtlam - 2.0),
-                    ],
-                ]
-            )
-            + jnp.eye(3)
-        )
-        return A
+        return self.state_transition_func(dt)
 
     def predict(self, t_star):
         dt = max(t_star - self.t_last, 0)
@@ -310,10 +204,135 @@ class MarkovianGP(objax.Module):
         self.C = mean
         self.t_last = jnp.inf
 
-        self.m = jnp.zeros((3, 1))
+        self.m = jnp.zeros((self.n_dim, 1))
         self.P = self.Pinf
         N = t.shape[0]
 
         for n in range(N):
             o = self.predict(t[n])
             self.update(t[n], y[n], *o)
+
+
+class SubbandMatern32(bayesnewton.kernels.StationaryKernel):
+    """
+    Subband Matern-3/2 kernel in SDE form (product of Cosine and Matern-3/2).
+    Hyperparameters:
+        variance, σ²
+        lengthscale, l
+        radial frequency, ω
+    The associated continuous-time state space model matrices are constructed via
+    kronecker sums and products of the Matern3/2 and cosine components:
+    letting λ = √3 / l
+    F      = F_mat3/2 ⊕ F_cos  =  ( 0     -ω     1     0
+                                    ω      0     0     1
+                                   -λ²     0    -2λ   -ω
+                                    0     -λ²    ω    -2λ )
+    L      = L_mat3/2 ⊗ I      =  ( 0      0
+                                    0      0
+                                    1      0
+                                    0      1 )
+    Qc     = I ⊗ Qc_mat3/2     =  ( 4λ³σ²  0
+                                    0      4λ³σ² )
+    H      = H_mat3/2 ⊗ H_cos  =  ( 1      0     0      0 )
+    Pinf   = Pinf_mat3/2 ⊗ I   =  ( σ²     0     0      0
+                                    0      σ²    0      0
+                                    0      0     3σ²/l² 0
+                                    0      0     0      3σ²/l²)
+    and the discrete-time transition matrix is (for step size Δt),
+    R = ( cos(ωΔt)   -sin(ωΔt)
+          sin(ωΔt)    cos(ωΔt) )
+    A = exp(-Δt/l) ( (1+Δtλ)R   ΔtR
+                     -Δtλ²R    (1-Δtλ)R )
+    """
+
+    def __init__(
+        self, variance=1.0, lengthscale=1.0, radial_frequency=1.0, fix_variance=False
+    ):
+        self.transformed_radial_frequency = objax.TrainVar(
+            jnp.array(softplus_inv(radial_frequency))
+        )
+        super().__init__(
+            variance=variance, lengthscale=lengthscale, fix_variance=fix_variance
+        )
+        self.name = "Subband Matern-3/2"
+        self.state_dim = 4
+
+    @property
+    def variance(self):
+        return softplus(self.transformed_variance.value)
+
+    @property
+    def lengthscale(self):
+        return softplus(self.transformed_lengthscale.value)
+
+    @property
+    def radial_frequency(self):
+        return softplus(self.transformed_radial_frequency.value)
+
+    def K_r(self, r):
+        k_cos = jnp.cos(self.radial_frequency * r * self.lengthscale)
+
+        sqrt3 = jnp.sqrt(3.0)
+        k_mat = (1.0 + sqrt3 * r) * jnp.exp(-sqrt3 * r)
+
+        return self.variance * k_mat * k_cos
+
+    def kernel_to_state_space(self, R=None):
+        lam = 3.0**0.5 / self.lengthscale
+        F_mat = jnp.array([[0.0, 1.0], [-(lam**2), -2 * lam]])
+        L_mat = jnp.array([[0], [1]])
+        Qc_mat = jnp.array([[12.0 * 3.0**0.5 / self.lengthscale**3.0 * self.variance]])
+        H_mat = jnp.array([[1.0, 0.0]])
+        Pinf_mat = jnp.array(
+            [[self.variance, 0.0], [0.0, 3.0 * self.variance / self.lengthscale**2.0]]
+        )
+        F_cos = jnp.array([[0.0, -self.radial_frequency], [self.radial_frequency, 0.0]])
+        H_cos = jnp.array([[1.0, 0.0]])
+        # F = (0   -ω   1   0
+        #      ω    0   0   1
+        #      -λ²  0  -2λ -ω
+        #      0   -λ²  ω  -2λ)
+        F = jnp.kron(F_mat, jnp.eye(2)) + jnp.kron(jnp.eye(2), F_cos)
+        L = jnp.kron(L_mat, jnp.eye(2))
+        Qc = jnp.kron(jnp.eye(2), Qc_mat)
+        H = jnp.kron(H_mat, H_cos)
+        Pinf = jnp.kron(Pinf_mat, jnp.eye(2))
+        return F, L, Qc, H, Pinf
+
+    def stationary_covariance(self):
+        Pinf_mat = jnp.array(
+            [[self.variance, 0.0], [0.0, 3.0 * self.variance / self.lengthscale**2.0]]
+        )
+        Pinf = jnp.kron(Pinf_mat, jnp.eye(2))
+        return Pinf
+
+    def measurement_model(self):
+        H_mat = jnp.array([[1.0, 0.0]])
+        H_cos = jnp.array([[1.0, 0.0]])
+        H = jnp.kron(H_mat, H_cos)
+        return H
+
+    def state_transition(self, dt):
+        """
+        Calculation of the closed form discrete-time state
+        transition matrix A = expm(FΔt) for the Subband Matern-3/2 prior
+        :param dt: step size(s), Δt = tₙ - tₙ₋₁ [1]
+        :return: state transition matrix A [4, 4]
+        """
+        lam = jnp.sqrt(3.0) / self.lengthscale
+        R = rotation_matrix(dt, self.radial_frequency)
+        A = jnp.exp(-dt * lam) * jnp.block(
+            [[(1.0 + dt * lam) * R, dt * R], [-dt * lam**2 * R, (1.0 - dt * lam) * R]]
+        )
+        return A
+
+    def feedback_matrix(self):
+        lam = 3.0**0.5 / self.lengthscale
+        F_mat = jnp.array([[0.0, 1.0], [-(lam**2), -2 * lam]])
+        F_cos = jnp.array([[0.0, -self.radial_frequency], [self.radial_frequency, 0.0]])
+        # F = (0   -ω   1   0
+        #      ω    0   0   1
+        #      -λ²  0  -2λ -ω
+        #      0   -λ²  ω  -2λ)
+        F = jnp.kron(F_mat, jnp.eye(2)) + jnp.kron(jnp.eye(2), F_cos)
+        return F

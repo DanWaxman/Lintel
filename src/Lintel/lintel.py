@@ -1,6 +1,6 @@
 from scipy import stats
 from jaxtyping import Array, Float
-from .gp_utils import MarkovianGP
+from .gp_utils_old import MarkovianGP
 import numpy as np
 import scipy
 
@@ -123,6 +123,7 @@ class LINTEL:
 
                 self.bin_total = 0.0
                 self.t_since_mean_update = 0.0
+                whats = np.ones_like(whats) / whats.size
 
         # Update weights with Eq. (16)
         log_w = np.log(whats)
