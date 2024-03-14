@@ -13,6 +13,8 @@ class LINTEL:
         weights: Float[Array, "M"],
         gps: list[MarkovianGP],
         L: int,
+        verbose: bool = False,
+        product_of_experts: bool = False,
     ):
         """Creates an instance of the LINTEL algorithm, as described in [1].
 
@@ -23,6 +25,8 @@ class LINTEL:
             weights (Float[Array, &quot;M&quot;]): the initial weights to be used
             gps (list[GP]): list of candidate models
             L (int): period until the mean is updated
+            verbose (bool): whether or not to print changepoints and other info
+            product_of_experts (bool): if True, use product of experts. Otherwise, use mixture of experts.
 
         References:
             [1] Waxman, D. & Djuric, P. M. (2024). Online Prediction of Switching Gaussian Process
@@ -34,6 +38,7 @@ class LINTEL:
         self.gps = gps
         self.M = len(gps)
         self.L = L
+        self.product_of_experts = product_of_experts
 
         # Potential Changepoint Bucket (PCB)
         self.tprime = []
@@ -42,6 +47,8 @@ class LINTEL:
         # Number of points since $\mu(\cdot)$ has been changed
         self.t_since_mean_update = 0
         self.bin_total = 0
+
+        self.verbose = verbose
 
     def predict_and_update(
         self, ttp1: Float[Array, "1"], ytp1: Float[Array, "1"]
@@ -76,13 +83,21 @@ class LINTEL:
             )
 
         # Calculate what from Eq. (15)
-        whats = self.weights**self.alpha + 1e-4
+        whats = self.weights**self.alpha + 1e-10
         whats = whats / np.sum(whats)
 
-        # Product of experts predictive distributions, Eqs. (21-22)
-        phat = np.sum(whats / candidate_variances)
-        sigmahat = 1 / phat
-        mhat = np.sum(candidate_means * whats / candidate_variances) / phat
+        if self.product_of_experts:
+            # Product of experts predictive distributions, Eqs. (21-22)
+            phat = np.sum(whats / candidate_variances)
+            sigmahat = 1 / phat
+            mhat = np.sum(candidate_means * whats / candidate_variances) / phat
+        else:
+            # Mixture of experts predictive distributions
+            mhat = np.sum(candidate_means * whats)
+            ymean = np.mean(candidate_means)
+            sigmahat = np.sum(
+                (candidate_variances + (ymean - mhat) ** 2) * whats,
+            )
 
         # If the data is within 3sigma, accept it, otherwise reject it
         if (ytp1 < mhat + 3 * np.sqrt(sigmahat)) and (
@@ -115,15 +130,18 @@ class LINTEL:
             # If tprime has >= N elements, we've arrived at a changepoint
             if len(self.tprime) >= self.N:
                 # Changepoint
+                if self.verbose:
+                    print(f"Changepoint at {ttp1}!")
+
                 t = np.array(self.tprime)
                 y = np.array(self.yprime)
 
                 for m in range(self.M):
                     self.gps[m].reset_and_filter(t, y, np.mean(y))
+                print(f"New Mean: {np.mean(y)}")
 
                 self.bin_total = 0.0
                 self.t_since_mean_update = 0.0
-                whats = np.ones_like(whats) / whats.size
 
         # Update weights with Eq. (16)
         log_w = np.log(whats)

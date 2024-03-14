@@ -10,29 +10,13 @@ from bayesnewton.utils import (
     softplus_inv,
     rotation_matrix,
 )
-import copy
 
 
 def add_to_diagonal(K: Float[Array, "N M"], constant: float) -> Float[Array, "N M"]:
     return K.at[jnp.diag_indices(K.shape[0])].add(constant)
 
 
-class ObjaxModuleWithDeepCopy(objax.Module):
-    def __deepcopy__(self, memo):
-        cls = self.__class__
-        result = cls.__new__(cls)
-        memo[id(self)] = result
-        for k, v in self.__dict__.items():
-            if isinstance(v, objax.BaseVar):
-                # TODO: There are more correct ways to do this, but it works for now
-                v = v.__class__(v.value)
-                setattr(result, k, v)
-            else:
-                setattr(result, k, copy.deepcopy(v, memo))
-        return result
-
-
-class GP(ObjaxModuleWithDeepCopy):
+class GP(objax.Module):
     def __init__(
         self,
         X: Float[Array, "N D"],
@@ -151,14 +135,14 @@ class GP(ObjaxModuleWithDeepCopy):
         for iter_idx in range(iters):
             f_value = train_op()
             if (iter_idx % 100 == 0 or iter_idx == iters - 1) and verbose:
-                print(iter_idx, f_value)
+                print(f"Loss at iteration {iter_idx}: {f_value[0]:.3f}")
 
         self.update_training_set(self.X, self.y)
 
         return f_value
 
 
-class MarkovianGP(ObjaxModuleWithDeepCopy):
+class MarkovianGP(objax.Module):
     def __init__(self, C, sigma_n, kernel):
         self.C = C
         self.transformed_sigma_n = objax.TrainVar(softplus_inv(jnp.asarray(sigma_n)))
