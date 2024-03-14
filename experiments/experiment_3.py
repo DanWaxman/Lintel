@@ -31,13 +31,48 @@ PLOT_MODE = args.plot_mode
 
 SEED = args.seed
 
+print("####################")
+print(f"Running with seed {SEED}")
+
 if FIT_MODE:
     np.random.seed(SEED)
 
-    print("Fetching Data")
-    s = "data/noumenta/realAWSCloudwatch/realAWSCloudwatch/ec2_cpu_utilization_ac20cd.csv"
-    y = pd.read_csv(s).value.to_numpy()
-    t = np.arange(len(y))
+    print("Generating Data")
+    t = np.sort(3000 * np.random.uniform(size=3000)).reshape(-1, 1)
+    k_truth_1 = bayesnewton.kernels.Sum(
+        [
+            SubbandMatern32(
+                radial_frequency=1.0 / 50.0, lengthscale=500.0, variance=1.5
+            ),
+            SubbandMatern32(
+                radial_frequency=1.0 / 20.0, lengthscale=300.0, variance=0.7
+            ),
+            SubbandMatern32(
+                radial_frequency=1.0 / 15.0, lengthscale=100.0, variance=0.2
+            ),
+        ]
+    )
+
+    k_truth_2 = bayesnewton.kernels.Matern52(lengthscale=50.0, variance=0.2)
+
+    y = np.zeros_like(t).squeeze()
+    y[:1500] = np.random.multivariate_normal(
+        mean=np.zeros((1500,)), cov=k_truth_1.K(t[:1500], t[:1500])
+    )
+    y[1500:2000] = np.random.multivariate_normal(
+        mean=np.zeros((500,)), cov=k_truth_2.K(t[1500:2000], t[1500:2000])
+    )
+    y[2000:] = np.random.multivariate_normal(
+        mean=np.zeros((1000,)), cov=k_truth_1.K(t[2000:], t[2000:])
+    )
+
+    y = y + np.random.randn(*y.shape) * 0.3
+    true_outliers = -np.random.randint(0, 1750, size=10)
+    for outlier in true_outliers:
+        y[outlier] = y[outlier] + np.random.randn() * 2.0
+    true_outliers = np.concatenate(
+        [true_outliers, np.array([-1000, -999, -998, -1500, -1499, 1498])]
+    )
 
     pretrain_t = t[:250].reshape(-1, 1)
     train_t = t[250:].reshape(-1, 1)
@@ -47,14 +82,21 @@ if FIT_MODE:
     print("Finished Generating Data")
 
     np.savez(
-        f"results/experiment_2_seed_{SEED}_geom_{args.geometric_fusion}_data.npz",
+        f"results/experiment_3_seed_{SEED}_geom_{args.geometric_fusion}_data.npz",
         pretrain_t=pretrain_t,
         train_t=train_t,
         pretrain_y=pretrain_y,
         train_y=train_y,
+        true_outliers=true_outliers,
     )
 
-    k0 = bayesnewton.kernels.Matern32()
+    k0 = bayesnewton.kernels.Sum(
+        [
+            SubbandMatern32(),
+            SubbandMatern32(),
+            SubbandMatern32(),
+        ]
+    )
 
     gp0 = GP(
         np.array(pretrain_t),
@@ -69,49 +111,13 @@ if FIT_MODE:
     print("Finished Pretraining")
 
     k1 = k0
-    k2 = bayesnewton.kernels.Matern32(
-        lengthscale=k0.lengthscale, variance=k0.variance * 2
-    )
-    k3 = bayesnewton.kernels.Matern32(lengthscale=k0.lengthscale, variance=k0.variance)
-    k4 = bayesnewton.kernels.Matern32(
-        lengthscale=k0.lengthscale, variance=k0.variance * 2
-    )
-    k5 = bayesnewton.kernels.Matern32(
-        lengthscale=k0.lengthscale, variance=k0.variance / 2.0
-    )
-    k6 = bayesnewton.kernels.Matern32(
-        lengthscale=k0.lengthscale, variance=k0.variance / 2.0
-    )
-    k7 = bayesnewton.kernels.Matern32(
-        lengthscale=k0.lengthscale, variance=k0.variance * 2
-    )
-    k8 = bayesnewton.kernels.Matern32(
-        lengthscale=k0.lengthscale, variance=k0.variance / 2.0
-    )
+    k2 = bayesnewton.kernels.Matern52(lengthscale=50.0, variance=0.2)
 
     gp1 = MarkovianGP(C=pretrain_y.mean(), sigma_n=gp0.sigma_n, kernel=k1)
     gp1.reset_and_filter(pretrain_t.squeeze()[-1:], pretrain_y[-1:], pretrain_y.mean())
 
     gp2 = MarkovianGP(C=pretrain_y.mean(), sigma_n=gp0.sigma_n, kernel=k2)
     gp2.reset_and_filter(pretrain_t.squeeze()[-1:], pretrain_y[-1:], pretrain_y.mean())
-
-    gp3 = MarkovianGP(C=pretrain_y.mean(), sigma_n=gp0.sigma_n * np.sqrt(2), kernel=k2)
-    gp3.reset_and_filter(pretrain_t.squeeze()[-1:], pretrain_y[-1:], pretrain_y.mean())
-
-    gp4 = MarkovianGP(C=pretrain_y.mean(), sigma_n=gp0.sigma_n * np.sqrt(2), kernel=k2)
-    gp4.reset_and_filter(pretrain_t.squeeze()[-1:], pretrain_y[-1:], pretrain_y.mean())
-
-    gp5 = MarkovianGP(C=pretrain_y.mean(), sigma_n=gp0.sigma_n, kernel=k2)
-    gp5.reset_and_filter(pretrain_t.squeeze()[-1:], pretrain_y[-1:], pretrain_y.mean())
-
-    gp6 = MarkovianGP(C=pretrain_y.mean(), sigma_n=gp0.sigma_n / np.sqrt(2), kernel=k2)
-    gp6.reset_and_filter(pretrain_t.squeeze()[-1:], pretrain_y[-1:], pretrain_y.mean())
-
-    gp7 = MarkovianGP(C=pretrain_y.mean(), sigma_n=gp0.sigma_n / np.sqrt(2), kernel=k2)
-    gp7.reset_and_filter(pretrain_t.squeeze()[-1:], pretrain_y[-1:], pretrain_y.mean())
-
-    gp8 = MarkovianGP(C=pretrain_y.mean(), sigma_n=gp0.sigma_n * np.sqrt(2), kernel=k2)
-    gp8.reset_and_filter(pretrain_t.squeeze()[-1:], pretrain_y[-1:], pretrain_y.mean())
 
     print("##################")
     print("#### LINTEL #####")
@@ -120,11 +126,11 @@ if FIT_MODE:
         N=3,
         alpha=0.9,
         weights=np.ones(
-            8,
+            2,
         )
-        / 8,
-        gps=[gp1, gp2, gp3, gp4, gp5, gp6, gp7, gp8],
-        L=50,
+        / 2,
+        gps=[gp1, gp2],
+        L=10000,
         verbose=True,
         product_of_experts=args.geometric_fusion,
     )
@@ -153,7 +159,7 @@ if FIT_MODE:
     ws = np.array(ws)
 
     np.savez(
-        f"results/experiment_2_seed_{SEED}_geom_{args.geometric_fusion}_lintel_results.npz",
+        f"results/experiment_3_seed_{SEED}_geom_{args.geometric_fusion}_lintel_results.npz",
         ms=ms,
         ss=ss,
         ots=ots,
@@ -164,46 +170,13 @@ if FIT_MODE:
     gp1 = GP(
         pretrain_t, pretrain_y, C=pretrain_y.mean(), sigma_n=gp0.sigma_n, kernel=k1
     )
+
     gp2 = GP(
-        pretrain_t, pretrain_y, C=pretrain_y.mean(), sigma_n=gp0.sigma_n, kernel=k2
-    )
-    gp3 = GP(
         pretrain_t,
         pretrain_y,
         C=pretrain_y.mean(),
-        sigma_n=gp0.sigma_n * np.sqrt(2),
-        kernel=k3,
-    )
-    gp4 = GP(
-        pretrain_t,
-        pretrain_y,
-        C=pretrain_y.mean(),
-        sigma_n=gp0.sigma_n * np.sqrt(2),
-        kernel=k4,
-    )
-    gp5 = GP(
-        pretrain_t, pretrain_y, C=pretrain_y.mean(), sigma_n=gp0.sigma_n, kernel=k5
-    )
-    gp6 = GP(
-        pretrain_t,
-        pretrain_y,
-        C=pretrain_y.mean(),
-        sigma_n=gp0.sigma_n / np.sqrt(2),
-        kernel=k6,
-    )
-    gp7 = GP(
-        pretrain_t,
-        pretrain_y,
-        C=pretrain_y.mean(),
-        sigma_n=gp0.sigma_n / np.sqrt(2),
-        kernel=k7,
-    )
-    gp8 = GP(
-        pretrain_t,
-        pretrain_y,
-        C=pretrain_y.mean(),
-        sigma_n=gp0.sigma_n * np.sqrt(2),
-        kernel=k8,
+        sigma_n=gp0.sigma_n,
+        kernel=k2,
     )
 
     print("#################")
@@ -214,13 +187,13 @@ if FIT_MODE:
         tau=20,
         alpha=0.9,
         weights=np.ones(
-            8,
+            2,
         )
-        / 8,
-        gps=[gp1, gp2, gp3, gp4, gp5, gp6, gp7, gp8],
-        L=50,
+        / 2,
+        gps=[gp1, gp2],
+        L=10000,
         verbose=True,
-        product_of_experts=False,
+        product_of_experts=args.geometric_fusion,
     )
 
     ms = []
@@ -248,7 +221,7 @@ if FIT_MODE:
     ws = np.array(ws)
 
     np.savez(
-        f"results/experiment_2_seed_{SEED}_geom_{args.geometric_fusion}_intel_results.npz",
+        f"results/experiment_3_seed_{SEED}_geom_{args.geometric_fusion}_intel_results.npz",
         ms=ms,
         ss=ss,
         ots=ots,
@@ -259,15 +232,16 @@ if FIT_MODE:
 ### Plotting
 if PLOT_MODE:
     data = np.load(
-        f"results/experiment_2_seed_{SEED}_geom_{args.geometric_fusion}_data.npz"
+        f"results/experiment_3_seed_{SEED}_geom_{args.geometric_fusion}_data.npz"
     )
     train_t = data["train_t"].squeeze()
     pretrain_t = data["pretrain_t"].squeeze()
     train_y = data["train_y"]
     pretrain_y = data["pretrain_y"]
+    true_outliers = data["true_outliers"]
 
     res_lintel = np.load(
-        f"results/experiment_2_seed_{SEED}_geom_{args.geometric_fusion}_lintel_results.npz"
+        f"results/experiment_3_seed_{SEED}_geom_{args.geometric_fusion}_lintel_results.npz"
     )
     m_lintel = res_lintel["ms"]
     s_lintel = res_lintel["ss"]
@@ -275,7 +249,7 @@ if PLOT_MODE:
     w_lintel = res_lintel["ws"]
 
     res_intel = np.load(
-        f"results/experiment_2_seed_{SEED}_geom_{args.geometric_fusion}_intel_results.npz"
+        f"results/experiment_3_seed_{SEED}_geom_{args.geometric_fusion}_intel_results.npz"
     )
     m_intel = res_intel["ms"]
     s_intel = res_intel["ss"]
@@ -287,19 +261,22 @@ if PLOT_MODE:
 
     intel_pll = stats.norm.logpdf(train_y, m_intel, np.sqrt(s_intel))
     lintel_pll = stats.norm.logpdf(train_y, m_lintel, np.sqrt(s_lintel))
-    print(intel_pll.mean())
-    print(lintel_pll.mean())
+    print(f"MPLL for INTEL: {np.delete(intel_pll, true_outliers).mean()}")
+    print(f"MPLL for LINTEL: {np.delete(lintel_pll, true_outliers).mean()}")
 
     intel_nmse = (train_y - m_intel) ** 2 / np.var(train_y)
     lintel_nmse = (train_y - m_lintel) ** 2 / np.var(train_y)
+    print(f"nMSE for INTEL: {np.delete(intel_nmse, true_outliers).mean()}")
+    print(f"nMSE for LINTEL: {np.delete(lintel_nmse, true_outliers).mean()}")
 
     plt.scatter(range(len(moving_average(intel_pll))), moving_average(intel_pll))
     plt.scatter(range(len(moving_average(lintel_pll))), moving_average(lintel_pll))
-    plt.savefig("plots/experiment_2_plls.png")
+    plt.savefig("plots/experiment_3_plls.png")
     plt.clf()
     print(train_t.shape, intel_pll.shape)
     plt.scatter(train_t, intel_pll - lintel_pll)
-    plt.savefig("plots/experiment_2_pll_diffs.png")
+    plt.scatter(train_t[true_outliers], (intel_pll - lintel_pll)[true_outliers])
+    plt.savefig("plots/experiment_3_pll_diffs.png")
 
     fig, ax1 = plt.subplots(figsize=(7, 2))
     ax1.scatter(pretrain_t, pretrain_y, alpha=0.75, s=2, label="Pretraining Points")
@@ -339,22 +316,22 @@ if PLOT_MODE:
         color=INTEL_COLOR,
     )
 
-    zoom_start = 422 - 250 - 100
-    zoom_end = 422 - 250 + 400
+    zoom_start = 1650
+    zoom_end = 1850
     x1, x2, y1, y2 = (
         train_t[zoom_start],
         train_t[zoom_end],
         np.min(
             m_lintel[zoom_start:zoom_end] - 2 * np.sqrt(s_lintel)[zoom_start:zoom_end]
         )
-        - 1.5,
+        - 1.0,
         np.max(
             m_lintel[zoom_start:zoom_end] + 2 * np.sqrt(s_lintel)[zoom_start:zoom_end]
         )
-        + 1.5,
+        + 1.0,
     )
     axin1 = ax1.inset_axes(
-        [0.4, 0.65, 0.15, 0.3],
+        [0.55, 0.65, 0.15, 0.3],
         xlim=(x1, x2),
         ylim=(y1, y2),
         xticks=[],
@@ -421,10 +398,11 @@ if PLOT_MODE:
         borderaxespad=0,
         ncol=3,
     )
-    plt.xlim([0, 3782])
-    plt.title("CPU Utilization")
+    plt.xlim([0, 3000])
+    plt.ylim([-5, 8])
+    plt.title("Synthetic Data, Outliers and Regime Switching")
     plt.savefig(
-        "plots/experiment_2_output.png",
+        "plots/experiment_3_output.png",
         dpi=600,
         transparent=False,
         bbox_inches="tight",
@@ -434,7 +412,7 @@ if PLOT_MODE:
     plt.plot(w_intel[:, 0], label="0")
     plt.plot(w_intel[:, 1], label="1")
     plt.legend()
-    plt.savefig("plots/experiment_2_intel_ws.png")
+    plt.savefig("plots/experiment_3_intel_ws.png")
     plt.clf()
     plt.plot(w_lintel)
-    plt.savefig("plots/experiment_2_lintel_ws.png")
+    plt.savefig("plots/experiment_3_lintel_ws.png")

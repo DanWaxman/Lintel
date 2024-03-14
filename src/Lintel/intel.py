@@ -1,6 +1,6 @@
 from scipy import stats
 from jaxtyping import Array, Float
-from .gp_utils_old import GP
+from .gp_utils import GP
 import numpy as np
 import scipy
 
