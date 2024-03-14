@@ -94,9 +94,8 @@ class LINTEL:
         else:
             # Mixture of experts predictive distributions
             mhat = np.sum(candidate_means * whats)
-            ymean = np.mean(candidate_means)
             sigmahat = np.sum(
-                (candidate_variances + (ymean - mhat) ** 2) * whats,
+                (candidate_variances + (candidate_means - mhat) ** 2) * whats,
             )
 
         # If the data is within 3sigma, accept it, otherwise reject it
