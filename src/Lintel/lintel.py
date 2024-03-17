@@ -1,6 +1,6 @@
 from scipy import stats
 from jaxtyping import Array, Float
-from .gp_utils_old import MarkovianGP
+from .gp_utils import MarkovianGP
 import numpy as np
 import scipy
 
@@ -26,7 +26,7 @@ class LINTEL:
             gps (list[GP]): list of candidate models
             L (int): period until the mean is updated
             verbose (bool): whether or not to print changepoints and other info
-            product_of_experts (bool): if True, use product of experts. Otherwise, use mixture of experts.
+            product_of_experts (bool): if True, use product of experts. Otherwise, use mixture of experts. Defaults to False.
 
         References:
             [1] Waxman, D. & Djuric, P. M. (2024). Online Prediction of Switching Gaussian Process
@@ -114,8 +114,15 @@ class LINTEL:
 
             # Update means if time since mean update is more than L
             if self.t_since_mean_update >= self.L:
+                # to C or not to C, that is the quesiton
+                newC = self.bin_total / self.t_since_mean_update
+                deltaC = newC - self.gps[m].C
+
                 for m in range(self.M):
-                    self.gps[m].C = self.bin_total / self.t_since_mean_update
+                    self.gps[m].C = newC
+                    self.gps[m].m = self.gps[m].m - self.gps[m].H.T * self.gps[
+                        m
+                    ].m * deltaC / np.sum(self.gps[m].H.T * self.gps[m].m)
 
                 self.bin_total = 0.0
                 self.t_since_mean_update = 0.0

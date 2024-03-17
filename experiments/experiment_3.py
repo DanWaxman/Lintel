@@ -59,11 +59,11 @@ if FIT_MODE:
     y[:1500] = np.random.multivariate_normal(
         mean=np.zeros((1500,)), cov=k_truth_1.K(t[:1500], t[:1500])
     )
-    y[1500:2000] = np.random.multivariate_normal(
-        mean=np.zeros((500,)), cov=k_truth_2.K(t[1500:2000], t[1500:2000])
+    y[1500:2500] = np.random.multivariate_normal(
+        mean=np.zeros((1000,)), cov=k_truth_2.K(t[1500:2500], t[1500:2500])
     )
-    y[2000:] = np.random.multivariate_normal(
-        mean=np.zeros((1000,)), cov=k_truth_1.K(t[2000:], t[2000:])
+    y[2500:] = np.random.multivariate_normal(
+        mean=np.zeros((500,)), cov=k_truth_1.K(t[2500:], t[2500:])
     )
 
     y = y + np.random.randn(*y.shape) * 0.3
@@ -71,7 +71,7 @@ if FIT_MODE:
     for outlier in true_outliers:
         y[outlier] = y[outlier] + np.random.randn() * 2.0
     true_outliers = np.concatenate(
-        [true_outliers, np.array([-1000, -999, -998, -1500, -1499, 1498])]
+        [true_outliers, np.array([-500, -499, -498, -1500, -1499, 1498])]
     )
 
     pretrain_t = t[:250].reshape(-1, 1)
@@ -130,7 +130,7 @@ if FIT_MODE:
         )
         / 2,
         gps=[gp1, gp2],
-        L=10000,
+        L=250,
         verbose=True,
         product_of_experts=args.geometric_fusion,
     )
@@ -191,7 +191,7 @@ if FIT_MODE:
         )
         / 2,
         gps=[gp1, gp2],
-        L=10000,
+        L=250,
         verbose=True,
         product_of_experts=args.geometric_fusion,
     )
@@ -278,7 +278,11 @@ if PLOT_MODE:
     plt.scatter(train_t[true_outliers], (intel_pll - lintel_pll)[true_outliers])
     plt.savefig("plots/experiment_3_pll_diffs.png")
 
-    fig, ax1 = plt.subplots(figsize=(7, 2))
+    fig, axs = plt.subplots(
+        nrows=2, figsize=(7.5, 2), sharex=True, height_ratios=[2, 1]
+    )
+    ax1, ax2 = axs
+
     ax1.scatter(pretrain_t, pretrain_y, alpha=0.75, s=2, label="Pretraining Points")
     ax1.scatter(
         train_t, train_y, color="black", alpha=0.75, s=2, label="Training Points"
@@ -316,8 +320,8 @@ if PLOT_MODE:
         color=INTEL_COLOR,
     )
 
-    zoom_start = 1650
-    zoom_end = 1850
+    zoom_start = 1500 - 250 - 150
+    zoom_end = 1500 - 250 + 150
     x1, x2, y1, y2 = (
         train_t[zoom_start],
         train_t[zoom_end],
@@ -391,16 +395,23 @@ if PLOT_MODE:
 
     ax1.indicate_inset_zoom(axin1, edgecolor="black", alpha=1, lw=0.7)
 
-    plt.legend(
-        bbox_to_anchor=(0, -0.4, 1, 0.2),
-        loc="upper left",
-        mode="expand",
-        borderaxespad=0,
-        ncol=3,
-    )
-    plt.xlim([0, 3000])
-    plt.ylim([-5, 8])
-    plt.title("Synthetic Data, Outliers and Regime Switching")
+    # plt.legend(
+    #     bbox_to_anchor=(0, -0.4, 1, 0.2),
+    #     loc="upper left",
+    #     mode="expand",
+    #     borderaxespad=0,
+    #     ncol=3,
+    # )
+
+    ax2.plot(train_t, m_intel - train_y, color=INTEL_COLOR, linestyle="--", alpha=0.4)
+    ax2.plot(train_t, m_lintel - train_y, color=LINTEL_COLOR, alpha=0.4)
+
+    ax2.set_ylabel("$m_n - y_n$")
+    ax1.set_ylabel("y(t)")
+
+    ax1.set_xlim([0, 3000])
+    ax1.set_ylim([-5, 8])
+    plt.suptitle("Synthetic Data, Outliers and Regime Switching")
     plt.savefig(
         "plots/experiment_3_output.png",
         dpi=600,

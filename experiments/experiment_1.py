@@ -267,7 +267,11 @@ if PLOT_MODE:
     plt.scatter(train_t[true_outliers], (intel_pll - lintel_pll)[true_outliers])
     plt.savefig("plots/experiment_1_pll_diffs.png")
 
-    fig, ax1 = plt.subplots(figsize=(7, 2))
+    fig, axs = plt.subplots(
+        nrows=2, figsize=(7.5, 2), sharex=True, height_ratios=[2, 1]
+    )
+    ax1, ax2 = axs
+
     ax1.scatter(pretrain_t, pretrain_y, alpha=0.75, s=2, label="Pretraining Points")
     ax1.scatter(
         train_t, train_y, color="black", alpha=0.75, s=2, label="Training Points"
@@ -380,16 +384,31 @@ if PLOT_MODE:
 
     ax1.indicate_inset_zoom(axin1, edgecolor="black", alpha=1, lw=0.7)
 
-    plt.legend(
-        bbox_to_anchor=(0, -0.4, 1, 0.2),
+    # Make legend. It's easier to bound it to ax2 if we want it at the bottom
+    ax2.scatter([], [], alpha=0.75, s=2, label="Pretraining Points")
+    ax2.scatter([], [], color="black", alpha=0.75, s=2, label="Training Points")
+    ax2.scatter([], [], color="red", marker="x", alpha=0.8, label="LINTEL Outlier")
+    ax2.scatter([], [], color="red", marker="+", alpha=0.8, label="INTEL Outlier")
+    ax2.plot([], [], color=LINTEL_COLOR, label="LINTEL")
+    ax2.plot([], [], color=INTEL_COLOR, label="INTEL")
+
+    ax2.legend(
+        bbox_to_anchor=(0, -0.75, 1, 0.2),
         loc="upper left",
         mode="expand",
         borderaxespad=0,
         ncol=3,
     )
-    plt.xlim([0, 3000])
-    plt.ylim([-5, 8])
-    plt.title("Synthetic Data, Outliers Only")
+
+    ax2.plot(train_t, m_intel - train_y, color=INTEL_COLOR, linestyle="--", alpha=0.4)
+    ax2.plot(train_t, m_lintel - train_y, color=LINTEL_COLOR, alpha=0.4)
+
+    ax2.set_ylabel("$m_n - y_n$")
+    ax1.set_ylabel("y(t)")
+
+    ax1.set_xlim([0, 3000])
+    ax1.set_ylim([-5, 8])
+    plt.suptitle("Synthetic Data, Outliers Only")
     plt.savefig(
         "plots/experiment_1_output.png",
         dpi=600,
@@ -400,7 +419,6 @@ if PLOT_MODE:
     plt.clf()
     plt.plot(w_intel[:, 0], label="0")
     plt.plot(w_intel[:, 1], label="1")
-    plt.legend()
     plt.savefig("plots/experiment_1_intel_ws.png")
     plt.clf()
     plt.plot(w_lintel)

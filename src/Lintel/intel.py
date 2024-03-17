@@ -27,7 +27,7 @@ class INTEL:
             gps (list[GP]): list of candidate models
             L (int): period until the mean is updated
             verbose (bool): whether or not to print changepoints and other info
-            product_of_experts (bool): if True, use product of experts. Otherwise, use mixture of experts.
+            product_of_experts (bool): if True, use product of experts. Otherwise, use mixture of experts. Defaults to True.
 
         References:
             [1] Liu, B., Qi, Y., & Chen, K. J. (2020). Sequential online prediction in the

@@ -95,22 +95,22 @@ if FIT_MODE:
     gp2 = MarkovianGP(C=pretrain_y.mean(), sigma_n=gp0.sigma_n, kernel=k2)
     gp2.reset_and_filter(pretrain_t.squeeze()[-1:], pretrain_y[-1:], pretrain_y.mean())
 
-    gp3 = MarkovianGP(C=pretrain_y.mean(), sigma_n=gp0.sigma_n * np.sqrt(2), kernel=k2)
+    gp3 = MarkovianGP(C=pretrain_y.mean(), sigma_n=gp0.sigma_n * np.sqrt(2), kernel=k3)
     gp3.reset_and_filter(pretrain_t.squeeze()[-1:], pretrain_y[-1:], pretrain_y.mean())
 
-    gp4 = MarkovianGP(C=pretrain_y.mean(), sigma_n=gp0.sigma_n * np.sqrt(2), kernel=k2)
+    gp4 = MarkovianGP(C=pretrain_y.mean(), sigma_n=gp0.sigma_n * np.sqrt(2), kernel=k4)
     gp4.reset_and_filter(pretrain_t.squeeze()[-1:], pretrain_y[-1:], pretrain_y.mean())
 
-    gp5 = MarkovianGP(C=pretrain_y.mean(), sigma_n=gp0.sigma_n, kernel=k2)
+    gp5 = MarkovianGP(C=pretrain_y.mean(), sigma_n=gp0.sigma_n, kernel=k5)
     gp5.reset_and_filter(pretrain_t.squeeze()[-1:], pretrain_y[-1:], pretrain_y.mean())
 
-    gp6 = MarkovianGP(C=pretrain_y.mean(), sigma_n=gp0.sigma_n / np.sqrt(2), kernel=k2)
+    gp6 = MarkovianGP(C=pretrain_y.mean(), sigma_n=gp0.sigma_n / np.sqrt(2), kernel=k6)
     gp6.reset_and_filter(pretrain_t.squeeze()[-1:], pretrain_y[-1:], pretrain_y.mean())
 
-    gp7 = MarkovianGP(C=pretrain_y.mean(), sigma_n=gp0.sigma_n / np.sqrt(2), kernel=k2)
+    gp7 = MarkovianGP(C=pretrain_y.mean(), sigma_n=gp0.sigma_n / np.sqrt(2), kernel=k7)
     gp7.reset_and_filter(pretrain_t.squeeze()[-1:], pretrain_y[-1:], pretrain_y.mean())
 
-    gp8 = MarkovianGP(C=pretrain_y.mean(), sigma_n=gp0.sigma_n * np.sqrt(2), kernel=k2)
+    gp8 = MarkovianGP(C=pretrain_y.mean(), sigma_n=gp0.sigma_n * np.sqrt(2), kernel=k8)
     gp8.reset_and_filter(pretrain_t.squeeze()[-1:], pretrain_y[-1:], pretrain_y.mean())
 
     print("##################")
@@ -220,7 +220,7 @@ if FIT_MODE:
         gps=[gp1, gp2, gp3, gp4, gp5, gp6, gp7, gp8],
         L=50,
         verbose=True,
-        product_of_experts=False,
+        product_of_experts=True,
     )
 
     ms = []
@@ -287,8 +287,8 @@ if PLOT_MODE:
 
     intel_pll = stats.norm.logpdf(train_y, m_intel, np.sqrt(s_intel))
     lintel_pll = stats.norm.logpdf(train_y, m_lintel, np.sqrt(s_lintel))
-    print(intel_pll.mean())
-    print(lintel_pll.mean())
+    print(intel_pll[750:1250].mean())
+    print(lintel_pll[750:1250].mean())
 
     intel_nmse = (train_y - m_intel) ** 2 / np.var(train_y)
     lintel_nmse = (train_y - m_lintel) ** 2 / np.var(train_y)
@@ -301,7 +301,10 @@ if PLOT_MODE:
     plt.scatter(train_t, intel_pll - lintel_pll)
     plt.savefig("plots/experiment_2_pll_diffs.png")
 
-    fig, ax1 = plt.subplots(figsize=(7, 2))
+    fig, axs = plt.subplots(
+        nrows=2, figsize=(7.5, 2), height_ratios=[2, 1], sharex=True
+    )
+    ax1, ax2 = axs
     ax1.scatter(pretrain_t, pretrain_y, alpha=0.75, s=2, label="Pretraining Points")
     ax1.scatter(
         train_t, train_y, color="black", alpha=0.75, s=2, label="Training Points"
@@ -414,15 +417,22 @@ if PLOT_MODE:
 
     ax1.indicate_inset_zoom(axin1, edgecolor="black", alpha=1, lw=0.7)
 
-    plt.legend(
-        bbox_to_anchor=(0, -0.4, 1, 0.2),
-        loc="upper left",
-        mode="expand",
-        borderaxespad=0,
-        ncol=3,
-    )
-    plt.xlim([0, 3782])
-    plt.title("CPU Utilization")
+    # plt.legend(
+    #     bbox_to_anchor=(0, -0.4, 1, 0.2),
+    #     loc="upper left",
+    #     mode="expand",
+    #     borderaxespad=0,
+    #     ncol=3,
+    # )
+
+    ax2.plot(train_t, m_intel - train_y, color=INTEL_COLOR, linestyle="--", alpha=0.4)
+    ax2.plot(train_t, m_lintel - train_y, color=LINTEL_COLOR, alpha=0.4)
+
+    ax1.set_xlim([0, 3782])
+    plt.suptitle("CPU Utilization")
+    ax2.set_ylabel("$m_n - y_n$")
+    ax1.set_ylabel("y(t)")
+
     plt.savefig(
         "plots/experiment_2_output.png",
         dpi=600,

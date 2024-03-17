@@ -1,0 +1,6 @@
+#!/bin/bash
+
+for seed in {0..9}; do
+    python experiment_1.py --fit_mode True --seed $seed
+    python experiment_1.py --fit_mode True --seed $seed --geometric_fusion True
+done
