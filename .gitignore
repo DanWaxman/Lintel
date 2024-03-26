@@ -162,3 +162,5 @@ cython_debug/
 experiments/data/*
 *.npz
 src/animation*
+*.png
+*test.ipynb*
