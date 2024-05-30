@@ -342,8 +342,8 @@ if PLOT_MODE:
         color=INTEL_COLOR,
     )
 
-    zoom_start = 422 - 250 - 100
-    zoom_end = 422 - 250 + 400
+    zoom_start = 422 - 250 - 75
+    zoom_end = 422 - 250 + 75
     x1, x2, y1, y2 = (
         train_t[zoom_start],
         train_t[zoom_end],
@@ -357,7 +357,157 @@ if PLOT_MODE:
         + 1.5,
     )
     axin1 = ax1.inset_axes(
-        [0.4, 0.65, 0.15, 0.3],
+        [0.3, 0.65, 0.15, 0.3],
+        xlim=(x1, x2),
+        ylim=(y1, y2),
+        xticks=[],
+        yticks=[],
+        xticklabels=[],
+        yticklabels=[],
+    )
+
+    axin1.scatter(
+        train_t[zoom_start:zoom_end],
+        train_y[zoom_start:zoom_end],
+        color="black",
+        alpha=0.75,
+        s=2,
+    )
+    axin1.plot(
+        train_t[zoom_start:zoom_end], m_lintel[zoom_start:zoom_end], color=LINTEL_COLOR
+    )
+    axin1.fill_between(
+        train_t[zoom_start:zoom_end],
+        m_lintel[zoom_start:zoom_end] + 2 * np.sqrt(s_lintel)[zoom_start:zoom_end],
+        m_lintel[zoom_start:zoom_end] - 2 * np.sqrt(s_lintel)[zoom_start:zoom_end],
+        alpha=0.3,
+        color=LINTEL_COLOR,
+    )
+    axin1.plot(
+        train_t[zoom_start:zoom_end],
+        m_intel[zoom_start:zoom_end],
+        linestyle="--",
+        color=INTEL_COLOR,
+    )
+    axin1.fill_between(
+        train_t[zoom_start:zoom_end],
+        m_intel[zoom_start:zoom_end] + 2 * np.sqrt(s_intel)[zoom_start:zoom_end],
+        m_intel[zoom_start:zoom_end] - 2 * np.sqrt(s_intel)[zoom_start:zoom_end],
+        alpha=0.3,
+        color=INTEL_COLOR,
+    )
+    os = o_lintel[(o_lintel > zoom_start) * (o_lintel < zoom_end)]
+    axin1.scatter(
+        train_t[os],
+        train_y[os],
+        marker="x",
+        color="red",
+        alpha=0.8,
+        label="LINTEL Outlier",
+    )
+    os = o_intel[(o_intel > zoom_start) * (o_intel < zoom_end)]
+    axin1.scatter(
+        train_t[os],
+        train_y[os],
+        marker="+",
+        color="red",
+        alpha=0.8,
+        label="INTEL Outlier",
+    )
+
+    ax1.indicate_inset_zoom(axin1, edgecolor="black", alpha=1, lw=0.7)
+
+    zoom_start = 1850 - 250
+    zoom_end = 1850 - 250 + 100
+    x1, x2, y1, y2 = (
+        train_t[zoom_start],
+        train_t[zoom_end],
+        np.min(
+            m_lintel[zoom_start:zoom_end] - 2 * np.sqrt(s_lintel)[zoom_start:zoom_end]
+        )
+        * 0.9,
+        np.max(
+            m_lintel[zoom_start:zoom_end] + 2 * np.sqrt(s_lintel)[zoom_start:zoom_end]
+        )
+        * 1.1,
+    )
+    axin1 = ax1.inset_axes(
+        [0.7, 0.65, 0.15, 0.3],
+        xlim=(x1, x2),
+        ylim=(y1, y2),
+        xticks=[],
+        yticks=[],
+        xticklabels=[],
+        yticklabels=[],
+    )
+
+    axin1.scatter(
+        train_t[zoom_start:zoom_end],
+        train_y[zoom_start:zoom_end],
+        color="black",
+        alpha=0.75,
+        s=2,
+    )
+    axin1.plot(
+        train_t[zoom_start:zoom_end], m_lintel[zoom_start:zoom_end], color=LINTEL_COLOR
+    )
+    axin1.fill_between(
+        train_t[zoom_start:zoom_end],
+        m_lintel[zoom_start:zoom_end] + 2 * np.sqrt(s_lintel)[zoom_start:zoom_end],
+        m_lintel[zoom_start:zoom_end] - 2 * np.sqrt(s_lintel)[zoom_start:zoom_end],
+        alpha=0.3,
+        color=LINTEL_COLOR,
+    )
+    axin1.plot(
+        train_t[zoom_start:zoom_end],
+        m_intel[zoom_start:zoom_end],
+        linestyle="--",
+        color=INTEL_COLOR,
+    )
+    axin1.fill_between(
+        train_t[zoom_start:zoom_end],
+        m_intel[zoom_start:zoom_end] + 2 * np.sqrt(s_intel)[zoom_start:zoom_end],
+        m_intel[zoom_start:zoom_end] - 2 * np.sqrt(s_intel)[zoom_start:zoom_end],
+        alpha=0.3,
+        color=INTEL_COLOR,
+    )
+    os = o_lintel[(o_lintel > zoom_start) * (o_lintel < zoom_end)]
+    axin1.scatter(
+        train_t[os],
+        train_y[os],
+        marker="x",
+        color="red",
+        alpha=0.8,
+        label="LINTEL Outlier",
+    )
+    os = o_intel[(o_intel > zoom_start) * (o_intel < zoom_end)]
+    axin1.scatter(
+        train_t[os],
+        train_y[os],
+        marker="+",
+        color="red",
+        alpha=0.8,
+        label="INTEL Outlier",
+    )
+
+    ax1.indicate_inset_zoom(axin1, edgecolor="black", alpha=1, lw=0.7)
+
+    zoom_start = 3560 - 250
+    zoom_end = 3560 - 250 + 40
+    x1, x2, y1, y2 = (
+        train_t[zoom_start],
+        train_t[zoom_end],
+        np.min(
+            m_lintel[zoom_start:zoom_end] - 2 * np.sqrt(s_lintel)[zoom_start:zoom_end]
+        )
+        * 0.9,
+        np.max(
+            m_lintel[zoom_start:zoom_end] + 2 * np.sqrt(s_lintel)[zoom_start:zoom_end]
+        )
+        * 1.1,
+    )
+    axin1 = ax1.inset_axes(
+        [0.8, 0.05, 0.10, 0.25],
         xlim=(x1, x2),
         ylim=(y1, y2),
         xticks=[],
@@ -432,6 +582,7 @@ if PLOT_MODE:
     plt.suptitle("CPU Utilization")
     ax2.set_ylabel("$m_n - y_n$")
     ax1.set_ylabel("y(t)")
+    ax1.set_ylim([-20, 120])
 
     plt.savefig(
         "plots/experiment_2_output.png",

@@ -7,13 +7,11 @@ If you use any code or results from this project, please consider citing the LIN
 
 ```
 @inproceedings{waxman2024lintel,
-  author={Waxman, Daniel and Djuri{\'c}, Petar M},
-  journal={}, 
-  title={A Gaussian Process-based Streaming Algorithm for Prediction of Time Series With Regimes and Outliers},
-  year={2024},
-  volume={},
-  number={},
-  note={Submitted.}
+  author = {Waxman, Daniel and Djurić, Petar {M.}},
+  booktitle = {2024 27th International Conference on Information Fusion (FUSION)},
+  title = {A Gaussian Process-based Streaming Algorithm for Prediction of Time Series With Regimes and Outliers},
+  year = {2024},
+  note = {Accepted.},
 }
 ```
 
