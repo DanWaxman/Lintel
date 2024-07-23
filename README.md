@@ -1,6 +1,8 @@
+[![arXiv](https://img.shields.io/badge/arXiv-2406.00570-b31b1b.svg)](https://arxiv.org/abs/2406.00570)
+
 # LINTEL
 
-This repository implements the method proposed in "A Gaussian Process-based Streaming Algorithm for Prediction of Time Series With Regimes and Outliers". This method seeks to improve upon the INTEL algorithm, presented by Liu et al. in "Sequential Online Prediction in the Presence of Outliers and Change Points: an Instant Temporal Structure Learning Approach", which is also implemented.
+This repository implements the method proposed in "A Gaussian Process-based Streaming Algorithm for Prediction of Time Series With Regimes and Outliers" ([arXiv](https://arxiv.org/abs/2406.00570)). This method seeks to improve upon the INTEL algorithm, presented by Liu et al. in "Sequential Online Prediction in the Presence of Outliers and Change Points: an Instant Temporal Structure Learning Approach", which is also implemented.
 
 # Citation
 If you use any code or results from this project, please consider citing the LINTEL paper:
